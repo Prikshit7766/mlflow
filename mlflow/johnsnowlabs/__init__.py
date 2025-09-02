@@ -675,6 +675,10 @@ def save_model(
             extra_pip_requirements=extra_pip_requirements,
         )
 
+        # CRITICAL: Ensure signature is preserved - Unity Catalog requires this!
+        if signature is not None:
+            mlflow_model.signature = signature
+
         code_dir_subpath = mlflow_model.flavors.get("python_function", {}).get("code")
         pyfunc_data = mlflow_model.flavors.get("python_function", {}).get("data")
 
@@ -686,6 +690,9 @@ def save_model(
             python_env=_PYTHON_ENV_FILE_NAME,
             code=code_dir_subpath,
         )
+
+        # Ensure MLmodel reflects the signature and pyfunc override (needed by UC)
+        mlflow_model.save(os.path.join(path, MLMODEL_FILE_NAME))
 
         if input_example is not None:
             _save_example(mlflow_model, input_example, path)
