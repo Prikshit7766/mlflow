@@ -682,16 +682,20 @@ def save_model(
         if signature is not None:
             mlflow_model.signature = signature
 
-        code_dir_subpath = mlflow_model.flavors.get("python_function", {}).get("code")
-        pyfunc_data = mlflow_model.flavors.get("python_function", {}).get("data")
-
+        # Get the existing python_function flavor configuration
+        pyfunc_flavor = mlflow_model.flavors.get("python_function", {})
+        
+        # Preserve all existing keys but override loader_module for Java support
         pyfunc.add_to_model(
             mlflow_model,
             loader_module="mlflow.johnsnowlabs",  # This is key for Java support!
-            data=pyfunc_data,
-            conda_env=_CONDA_ENV_FILE_NAME,
-            python_env=_PYTHON_ENV_FILE_NAME,
-            code=code_dir_subpath,
+            data=pyfunc_flavor.get("data"),
+            conda_env=pyfunc_flavor.get("conda_env", _CONDA_ENV_FILE_NAME),
+            python_env=pyfunc_flavor.get("python_env", _PYTHON_ENV_FILE_NAME),
+            code=pyfunc_flavor.get("code"),
+            python_model=pyfunc_flavor.get("python_model"),  # Preserve this key!
+            artifacts=pyfunc_flavor.get("artifacts"),
+            streamable=pyfunc_flavor.get("streamable"),
         )
 
         # Ensure MLmodel reflects the signature and pyfunc override (needed by UC)
@@ -700,15 +704,15 @@ def save_model(
         if input_example is not None:
             _save_example(mlflow_model, input_example, path)
 
-        try:
-            _save_jars_and_lic(path, store_license)
-        except Exception as e:
-            _logger.warning(
-                f"Could not save JAR files (JSL not properly installed): {e}"
-            )
-            _logger.info(
-                "Java will still be available in containers due to johnsnowlabs loader_module"
-            )
+        # try:
+        #     _save_jars_and_lic(path, store_license)
+        # except Exception as e:
+        #     _logger.warning(
+        #         f"Could not save JAR files (JSL not properly installed): {e}"
+        #     )
+        #     _logger.info(
+        #         "Java will still be available in containers due to johnsnowlabs loader_module"
+        #     )
 
         return result
 
