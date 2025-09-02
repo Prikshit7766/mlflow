@@ -675,6 +675,10 @@ def save_model(
             extra_pip_requirements=extra_pip_requirements,
         )
 
+        # CRITICAL: Ensure signature is preserved - Unity Catalog requires this!
+        if signature is not None:
+            mlflow_model.signature = signature
+
         code_dir_subpath = mlflow_model.flavors.get("python_function", {}).get("code")
         pyfunc_data = mlflow_model.flavors.get("python_function", {}).get("data")
 
