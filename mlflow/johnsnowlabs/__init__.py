@@ -344,6 +344,8 @@ def log_model(
 
     # If using python_model, use the standard pyfunc workflow but with johnsnowlabs flavor
     if python_model is not None:
+        # Ensure we have an active run for proper tracking and UC registration
+        run_id = mlflow.tracking.fluent._get_or_start_run().info.run_id
         return Model.log(
             artifact_path=artifact_path,
             name=name,
@@ -365,6 +367,7 @@ def log_model(
             step=step,
             model_id=model_id,
             store_license=store_license,
+            run_id=run_id,
         )
 
     _validate_env_vars()
