@@ -525,6 +525,7 @@ def _save_python_model_with_johnsnowlabs_flavor(
     similar to _save_model_metadata but for custom Python models.
     
     Args:
+        path: Path where model should be saved
         python_model: Custom PythonModel instance
         artifacts: Path where model should be saved (can be dict of artifacts too)
         mlflow_model: MLflow model config
