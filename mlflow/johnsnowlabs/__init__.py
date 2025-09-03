@@ -542,16 +542,18 @@ def _save_python_model_with_johnsnowlabs_flavor(
     import mlflow.pyfunc.model
     from pathlib import Path
 
+    os.makedirs(path, exist_ok=True)
+
     # Set signature if provided
     if signature is not None:
         mlflow_model.signature = signature
         
     # Save input example if provided
     if input_example is not None:
-        _save_example(mlflow_model, input_example, artifacts)
+        _save_example(mlflow_model, input_example, path)
     
     # Validate and copy code paths (johnsnowlabs-specific)
-    code_dir_subpath = _validate_and_copy_code_paths(code_paths, artifacts)
+    code_dir_subpath = _validate_and_copy_code_paths(code_paths, path)
 
     # Add johnsnowlabs flavor with pyspark version (like _save_model_metadata)
     import pyspark
@@ -591,15 +593,16 @@ def _save_python_model_with_johnsnowlabs_flavor(
         streamable=pyfunc_flavor.get("streamable"),
     )
     
-    if size := get_total_file_size(artifacts):
+    if size := get_total_file_size(path):
         mlflow_model.model_size_bytes = size
-    mlflow_model.save(str(Path(artifacts) / MLMODEL_FILE_NAME))
+
+    mlflow_model.save(os.path.join(path, MLMODEL_FILE_NAME))
 
     _save_conda_and_requirements(
-        artifacts, conda_env, pip_requirements, extra_pip_requirements
+        path, conda_env, pip_requirements, extra_pip_requirements
     )
 
-    _save_jars_and_lic(artifacts, store_license)
+    _save_jars_and_lic(path, store_license)
 
 def _save_jars_and_lic(dst_dir, store_license=False):
     from johnsnowlabs.auto_install.jsl_home import get_install_suite_from_jsl_home
