@@ -758,7 +758,25 @@ def save_model(
             dfs_tmpdir = MLFLOW_DFS_TMP.get()
         tmp_path = generate_tmp_dfs_path(dfs_tmpdir)
         _unpack_and_save_model(spark_model, tmp_path)
-        artifacts = {"model-path": tmp_path}
+
+        sparkml_data_path = os.path.abspath(str(Path(path) / _JOHNSNOWLABS_MODEL_PATH_SUB)) 
+        # We're copying the Spark model from DBFS to the local filesystem if (a) the temporary DFS URI
+        # we saved the Spark model to is a DBFS URI ("dbfs:/my-directory"), or (b) if we're running
+        # on a Databricks cluster and the URI is schemeless (e.g. looks like a filesystem absolute path
+        # like "/my-directory")
+        copying_from_dbfs = is_valid_dbfs_uri(tmp_path) or (
+            databricks_utils.is_in_cluster() and posixpath.abspath(tmp_path) == tmp_path
+        )
+        
+        if copying_from_dbfs and databricks_utils.is_dbfs_fuse_available():
+            tmp_path_fuse = dbfs_hdfs_uri_to_fuse_path(tmp_path)
+            shutil.move(src=tmp_path_fuse, dst=sparkml_data_path)
+        else:
+            _HadoopFileSystem.copy_to_local_file(
+                tmp_path, sparkml_data_path, remove_src=True
+            )
+            
+        artifacts = {"model-path": sparkml_data_path}
 
     if python_model:
         _save_python_model_with_johnsnowlabs_flavor(
@@ -775,23 +793,6 @@ def save_model(
             store_license=store_license,
         )
     else:
-        sparkml_data_path = os.path.abspath(
-            str(Path(path) / _JOHNSNOWLABS_MODEL_PATH_SUB)
-        )
-        # We're copying the Spark model from DBFS to the local filesystem if (a) the temporary DFS URI
-        # we saved the Spark model to is a DBFS URI ("dbfs:/my-directory"), or (b) if we're running
-        # on a Databricks cluster and the URI is schemeless (e.g. looks like a filesystem absolute path
-        # like "/my-directory")
-        copying_from_dbfs = is_valid_dbfs_uri(tmp_path) or (
-            databricks_utils.is_in_cluster() and posixpath.abspath(tmp_path) == tmp_path
-        )
-        if copying_from_dbfs and databricks_utils.is_dbfs_fuse_available():
-            tmp_path_fuse = dbfs_hdfs_uri_to_fuse_path(tmp_path)
-            shutil.move(src=tmp_path_fuse, dst=sparkml_data_path)
-        else:
-            _HadoopFileSystem.copy_to_local_file(
-                tmp_path, sparkml_data_path, remove_src=True
-            )
         _save_model_metadata(
             dst_dir=path,
             spark_model=spark_model,
