@@ -329,17 +329,12 @@ def log_model(
         mlflow.johnsnowlabs.log_model(trained_classifier, name="my_trained_model")
     """
 
-    # Validation: Need at least one model source
     if spark_model is None and artifacts is None:
         raise ValueError("Must specify either spark_model or artifacts")
-    
-    # Validation: spark_model and artifacts are mutually exclusive
-    if spark_model is not None and artifacts is not None:
-        raise ValueError(
-            "Cannot specify both spark_model and artifacts. Choose one."
-        )
 
-    # Validation: python_model must be PythonModel instance if provided
+    if spark_model is not None and artifacts is not None:
+        raise ValueError("Cannot specify both spark_model and artifacts. Choose one.")
+
     if python_model is not None and not isinstance(python_model, PythonModel):
         raise ValueError(
             "python_model must be an instance of mlflow.pyfunc.PythonModel"
@@ -356,9 +351,13 @@ def log_model(
     # be incorrect on multi-node clusters.
     # If the artifact URI is not a local filesystem path we attempt to write directly to the
     # artifact repo via Spark. If this fails, we defer to Model.log().
-    if python_model or is_local_uri(run_root_artifact_uri) or not _maybe_save_model(
-        spark_model,
-        append_to_uri_path(run_root_artifact_uri, name),
+    if (
+        python_model
+        or is_local_uri(run_root_artifact_uri)
+        or not _maybe_save_model(
+            spark_model,
+            append_to_uri_path(run_root_artifact_uri, name),
+        )
     ):
         return Model.log(
             artifact_path=artifact_path,
@@ -419,7 +418,9 @@ def log_model(
         return mlflow_model.get_model_info()
 
 
-def _save_conda_and_requirements(dst_dir, conda_env, pip_requirements, extra_pip_requirements):
+def _save_conda_and_requirements(
+    dst_dir, conda_env, pip_requirements, extra_pip_requirements
+):
     """
     Helper function to save conda environment and requirements files.
     """
@@ -442,11 +443,10 @@ def _save_conda_and_requirements(dst_dir, conda_env, pip_requirements, extra_pip
         write_to(
             str(Path(dst_dir) / _CONSTRAINTS_FILE_NAME), "\n".join(pip_constraints)
         )
-    
+
     write_to(str(Path(dst_dir) / _REQUIREMENTS_FILE_NAME), "\n".join(pip_requirements))
 
     _PythonEnv.current().to_yaml(str(Path(dst_dir) / _PYTHON_ENV_FILE_NAME))
-
 
 
 def _save_model_metadata(
@@ -500,7 +500,9 @@ def _save_model_metadata(
         mlflow_model.model_size_bytes = size
     mlflow_model.save(str(Path(dst_dir) / MLMODEL_FILE_NAME))
 
-    _save_conda_and_requirements(dst_dir, conda_env, pip_requirements, extra_pip_requirements)
+    _save_conda_and_requirements(
+        dst_dir, conda_env, pip_requirements, extra_pip_requirements
+    )
 
     _save_jars_and_lic(dst_dir)
 
@@ -520,10 +522,10 @@ def _save_python_model_with_johnsnowlabs_flavor(
 ):
     """
     Save a custom Python model with johnsnowlabs flavor support.
-    
+
     This function combines MLflow's pyfunc saving with johnsnowlabs-specific setup,
     similar to _save_model_metadata but for custom Python models.
-    
+
     Args:
         path: Path where model should be saved
         python_model: Custom PythonModel instance
@@ -536,28 +538,24 @@ def _save_python_model_with_johnsnowlabs_flavor(
         pip_requirements: Pip requirements
         extra_pip_requirements: Extra pip requirements
         store_license: Whether to store JSL license
-        
+
     Returns:
         Result from _save_model_with_class_artifacts_params
     """
     import mlflow.pyfunc.model
-    from pathlib import Path
 
     os.makedirs(path, exist_ok=True)
 
-    # Set signature if provided
     if signature is not None:
         mlflow_model.signature = signature
-        
-    # Save input example if provided
+
     if input_example is not None:
         _save_example(mlflow_model, input_example, path)
-    
-    # Validate and copy code paths (johnsnowlabs-specific)
+
     code_dir_subpath = _validate_and_copy_code_paths(code_paths, path)
 
-    # Add johnsnowlabs flavor with pyspark version (like _save_model_metadata)
     import pyspark
+
     mlflow_model.add_flavor(
         FLAVOR_NAME,
         pyspark_version=pyspark.__version__,
@@ -566,7 +564,7 @@ def _save_python_model_with_johnsnowlabs_flavor(
     )
 
     # Use MLflow's standard pyfunc saving mechanism for python model + artifacts
-    result = mlflow.pyfunc.model._save_model_with_class_artifacts_params(
+    mlflow.pyfunc.model._save_model_with_class_artifacts_params(
         path=path,
         python_model=python_model,
         artifacts=artifacts,
@@ -577,23 +575,22 @@ def _save_python_model_with_johnsnowlabs_flavor(
         pip_requirements=pip_requirements,
         extra_pip_requirements=extra_pip_requirements,
     )
-    
+
     # CRITICAL: Override python_function flavor with johnsnowlabs loader for Java support
-    # This ensures Java is available in deployment containers (like _save_model_metadata)
     pyfunc_flavor = mlflow_model.flavors.get("python_function", {})
-    
+
     pyfunc.add_to_model(
         mlflow_model,
         loader_module="mlflow.johnsnowlabs",  # This is key for Java support!
         data=pyfunc_flavor.get("data"),
         conda_env=pyfunc_flavor.get("conda_env", _CONDA_ENV_FILE_NAME),
         python_env=pyfunc_flavor.get("python_env", _PYTHON_ENV_FILE_NAME),
-        code=pyfunc_flavor.get("code", code_dir_subpath),  # Use our code path
-        python_model=pyfunc_flavor.get("python_model"),  # Preserve this key!
+        code=pyfunc_flavor.get("code", code_dir_subpath),
+        python_model=pyfunc_flavor.get("python_model"),
         artifacts=pyfunc_flavor.get("artifacts"),
         streamable=pyfunc_flavor.get("streamable"),
     )
-    
+
     if size := get_total_file_size(path):
         mlflow_model.model_size_bytes = size
 
@@ -604,6 +601,7 @@ def _save_python_model_with_johnsnowlabs_flavor(
     )
 
     _save_jars_and_lic(path, store_license)
+
 
 def _save_jars_and_lic(dst_dir, store_license=False):
     from johnsnowlabs.auto_install.jsl_home import get_install_suite_from_jsl_home
@@ -656,6 +654,8 @@ def save_model(
         spark_model: Either a pyspark.ml.pipeline.PipelineModel or nlu.NLUPipeline object to be
             saved. `Every johnsnowlabs model <https://nlp.johnsnowlabs.com/models>`_
             is a PipelineModel and loadable as nlu.NLUPipeline.
+        python_model: A custom PythonModel instance to be saved.
+        artifacts: A dictionary of artifacts to be saved.
         path: Local path where the model is to be saved.
         mlflow_model: MLflow model config this flavor is being added to.
         conda_env: Either a dictionary representation of a Conda environment or the path to a
@@ -733,17 +733,12 @@ def save_model(
         model.predict(["I hate covid", "I love covid"])
     """
 
-    # Validation: Need at least one model source
     if spark_model is None and artifacts is None:
         raise ValueError("Must specify either spark_model or artifacts")
-    
-    # Validation: spark_model and artifacts are mutually exclusive
-    if spark_model is not None and artifacts is not None:
-        raise ValueError(
-            "Cannot specify both spark_model and artifacts. Choose one."
-        )
 
-    # Validation: python_model must be PythonModel instance if provided
+    if spark_model is not None and artifacts is not None:
+        raise ValueError("Cannot specify both spark_model and artifacts. Choose one.")
+
     if python_model is not None and not isinstance(python_model, PythonModel):
         raise ValueError(
             "python_model must be an instance of mlflow.pyfunc.PythonModel"
@@ -763,7 +758,7 @@ def save_model(
             dfs_tmpdir = MLFLOW_DFS_TMP.get()
         tmp_path = generate_tmp_dfs_path(dfs_tmpdir)
         _unpack_and_save_model(spark_model, tmp_path)
-        artifacts = {"model-path": tmp_path}
+        artifacts = {"model-path": os.path.join(tmp_path, "")}
 
     if python_model:
         _save_python_model_with_johnsnowlabs_flavor(
@@ -780,7 +775,9 @@ def save_model(
             store_license=store_license,
         )
     else:
-        sparkml_data_path = os.path.abspath(str(Path(path) / _JOHNSNOWLABS_MODEL_PATH_SUB))
+        sparkml_data_path = os.path.abspath(
+            str(Path(path) / _JOHNSNOWLABS_MODEL_PATH_SUB)
+        )
         # We're copying the Spark model from DBFS to the local filesystem if (a) the temporary DFS URI
         # we saved the Spark model to is a DBFS URI ("dbfs:/my-directory"), or (b) if we're running
         # on a Databricks cluster and the URI is schemeless (e.g. looks like a filesystem absolute path
@@ -942,13 +939,10 @@ def _load_pyfunc(path, spark=None):
         Model wrapper for either spark models or custom python models.
 
     """
-    # Load the MLflow model configuration
     mlflow_model = Model.load(path)
 
-    # Check if this model has standard pyfunc flavor (for python models)
     pyfunc_conf = mlflow_model.flavors.get("python_function", {})
 
-    # If it has standard pyfunc configuration, delegate to pyfunc loader
     if pyfunc_conf and any(
         key in pyfunc_conf for key in ["python_model", "loader_module"]
     ):
@@ -956,7 +950,6 @@ def _load_pyfunc(path, spark=None):
 
         return mlflow.pyfunc.model._load_pyfunc(path)
 
-    # Otherwise, use the original spark model loading logic
     return _PyFuncModelWrapper(
         _load_model(model_uri=path),
         spark or _get_or_create_sparksession(path),
