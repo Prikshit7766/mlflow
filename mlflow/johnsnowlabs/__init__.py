@@ -762,8 +762,24 @@ def save_model(
         if dfs_tmpdir is None:
             dfs_tmpdir = MLFLOW_DFS_TMP.get()
         tmp_path = generate_tmp_dfs_path(dfs_tmpdir)
-
         _unpack_and_save_model(spark_model, tmp_path)
+        artifacts = {"model-path": tmp_path}
+
+    if python_model:
+        _save_python_model_with_johnsnowlabs_flavor(
+            path=path,
+            python_model=python_model,
+            artifacts=artifacts,
+            mlflow_model=mlflow_model,
+            conda_env=conda_env,
+            code_paths=code_paths,
+            signature=signature,
+            input_example=input_example,
+            pip_requirements=pip_requirements,
+            extra_pip_requirements=extra_pip_requirements,
+            store_license=store_license,
+        )
+    else:
         sparkml_data_path = os.path.abspath(str(Path(path) / _JOHNSNOWLABS_MODEL_PATH_SUB))
         # We're copying the Spark model from DBFS to the local filesystem if (a) the temporary DFS URI
         # we saved the Spark model to is a DBFS URI ("dbfs:/my-directory"), or (b) if we're running
@@ -779,24 +795,6 @@ def save_model(
             _HadoopFileSystem.copy_to_local_file(
                 tmp_path, sparkml_data_path, remove_src=True
             )
-
-    if python_model:
-        if spark_model:
-            artifacts = {"model-path": sparkml_data_path}
-        _save_python_model_with_johnsnowlabs_flavor(
-            path=path,
-            python_model=python_model,
-            artifacts=artifacts,
-            mlflow_model=mlflow_model,
-            conda_env=conda_env,
-            code_paths=code_paths,
-            signature=signature,
-            input_example=input_example,
-            pip_requirements=pip_requirements,
-            extra_pip_requirements=extra_pip_requirements,
-            store_license=store_license,
-        )
-    else:
         _save_model_metadata(
             dst_dir=path,
             spark_model=spark_model,
