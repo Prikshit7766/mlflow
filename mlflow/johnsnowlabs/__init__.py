@@ -758,7 +758,7 @@ def save_model(
             dfs_tmpdir = MLFLOW_DFS_TMP.get()
         tmp_path = generate_tmp_dfs_path(dfs_tmpdir)
         _unpack_and_save_model(spark_model, tmp_path)
-        artifacts = {"model-path": os.path.join(tmp_path, "")}
+        artifacts = {"model-path": tmp_path}
 
     if python_model:
         _save_python_model_with_johnsnowlabs_flavor(
