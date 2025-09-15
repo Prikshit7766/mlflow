@@ -52,9 +52,17 @@ import posixpath
 import shutil
 import sys
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
+
+if TYPE_CHECKING:
+    from nlu.pipe.pipeline import NLUPipeline
+    from pyspark.ml.pipeline import PipelineModel
+
+    SparkModelType = PipelineModel | NLUPipeline | "JSLPythonModel"
+else:
+    SparkModelType = Any
 
 import mlflow
 from mlflow import pyfunc
@@ -197,7 +205,7 @@ def get_default_conda_env():
 
 @format_docstring(LOG_MODEL_PARAM_DOCS.format(package_name="johnsnowlabs"))
 def log_model(
-    spark_model=None,
+    spark_model: SparkModelType = None,
     artifact_path: str | None = None,
     conda_env=None,
     code_paths=None,
@@ -225,9 +233,9 @@ def log_model(
     Note: If no run is active, it will instantiate a run to obtain a run_id.
 
     Args:
-        spark_model: NLUPipeline obtained via `nlp.load()
-            <https://nlp.johnsnowlabs.com/docs/en/jsl/load_api>`_,
-            or an instance of a subclass of :class:`~mlflow.pyfunc.PythonModel`
+        spark_model: A `pyspark.ml.PipelineModel` or an `nlu.NLUPipeline` object to be saved
+            (see `John Snow Labs models <https://nlp.johnsnowlabs.com/models>`_),
+            or an instance of a subclass of :class:`JSLPythonModel`
             that is compatible with John Snow Labs models.
 
         artifact_path: Deprecated. Use `name` instead.
@@ -342,7 +350,7 @@ def log_model(
     # If the artifact URI is not a local filesystem path we attempt to write directly to the
     # artifact repo via Spark. If this fails, we defer to Model.log().
     if (
-        isinstance(spark_model, PythonModel)
+        isinstance(spark_model, JSLPythonModel)
         or is_local_uri(run_root_artifact_uri)
         or not _maybe_save_model(
             spark_model,
@@ -607,7 +615,7 @@ def _save_jars_and_lic(dst_dir, store_license=False):
 
 @format_docstring(LOG_MODEL_PARAM_DOCS.format(package_name="johnsnowlabs"))
 def save_model(
-    spark_model=None,
+    spark_model: SparkModelType = None,
     path=None,
     mlflow_model=None,
     conda_env=None,
@@ -628,7 +636,7 @@ def save_model(
     Args:
         spark_model: A `pyspark.ml.PipelineModel` or an `nlu.NLUPipeline` object to be saved
             (see `John Snow Labs models <https://nlp.johnsnowlabs.com/models>`_),
-            or an instance of a subclass of :class:`~mlflow.pyfunc.PythonModel`
+            or an instance of a subclass of :class:`JSLPythonModel`
             that is compatible with John Snow Labs models.
         path: Local path where the model is to be saved.
         mlflow_model: MLflow model config this flavor is being added to.
@@ -736,7 +744,7 @@ def save_model(
     else:
         _HadoopFileSystem.copy_to_local_file(tmp_path, sparkml_data_path, remove_src=True)
 
-    if isinstance(spark_model, PythonModel):
+    if isinstance(spark_model, JSLPythonModel):
         _save_python_model_with_johnsnowlabs_flavor(
             path=path,
             python_model=spark_model,
@@ -902,7 +910,7 @@ def _load_pyfunc(path, spark=None):
 
         return mlflow.pyfunc.model._load_pyfunc(path)
 
-    return _PyFuncModelWrapper(
+    return JSLPythonModel(
         _load_model(model_uri=path),
         spark or _get_or_create_sparksession(path),
     )
@@ -976,10 +984,10 @@ def _fetch_deps_from_path(local_model_path):
     return jar_paths, license_path
 
 
-def _unpack_and_save_model(spark_model, dst):
+def _unpack_and_save_model(spark_model: SparkModelType, dst: str):
     from pyspark.ml import PipelineModel
 
-    if isinstance(spark_model, PythonModel):
+    if isinstance(spark_model, JSLPythonModel):
         spark_model = spark_model.spark_model
     if isinstance(spark_model, PipelineModel):
         spark_model.write().overwrite().save(dst)
@@ -995,7 +1003,7 @@ def _unpack_and_save_model(spark_model, dst):
             spark_model.save(dst)
 
 
-class _PyFuncModelWrapper(PythonModel):
+class JSLPythonModel(PythonModel):
     """
     Wrapper around NLUPipeline providing interface for scoring pandas DataFrame.
     """
@@ -1005,7 +1013,7 @@ class _PyFuncModelWrapper(PythonModel):
         spark_model,
         spark=None,
     ):
-        # we have this `or`, so we support _PyFuncModelWrapper(nlu_ref)
+        # we have this `or`, so we support JSLPythonModel(nlu_ref)
         self.spark = spark or _get_or_create_sparksession()
         self.spark_model = spark_model
 
